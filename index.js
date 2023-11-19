@@ -128,7 +128,7 @@ async function onProtectChange() {
 
 async function onApplyClick() {
     let error = false;
-    const character = $("#rvc_character_select").val();
+    const character = String($("#rvc_character_select").val());
     const model_name = $("#rvc_model_select").val();
     const pitchExtraction = $("#rvc_pitch_extraction").val();
     const indexRate = $("#rvc_index_rate").val();
@@ -158,13 +158,14 @@ async function onApplyClick() {
     }
 
     updateVoiceMapText();
+    toastr.info("Settings saved.", DEBUG_PREFIX, { preventDuplicates: true });
 
     console.debug(DEBUG_PREFIX, "Updated settings of ", character, ":", extension_settings.rvc.voiceMap[character])
     saveSettingsDebounced();
 }
 
 async function onDeleteClick() {
-    const character = $("#rvc_character_select").val();
+    const character = String($("#rvc_character_select").val());
 
     if (character === "none") {
         toastr.error("Character not selected.", DEBUG_PREFIX + " voice mapping delete", { timeOut: 10000, extendedTimeOut: 20000, preventDuplicates: true });
@@ -217,33 +218,34 @@ $(document).ready(function () {
                             <input type="checkbox" id="rvc_enabled" name="rvc_enabled">
                             <small>Enabled</small>
                         </label>
-                        <label>Voice Map (debug infos)</label>
-                        <textarea id="rvc_voice_map" type="text" class="text_pole textarea_compact" rows="4"
-                            placeholder="Voice map will appear here for debug purpose"></textarea>
                     </div>
                     <div>
                         <div class="background_controls">
                             <label for="rvc_character_select">Character:</label>
-                            <select id="rvc_character_select">
-                                <!-- Populated by JS -->
-                            </select>
-                            <div id="rvc_delete" class="menu_button">
-                                <i class="fa-solid fa-times"></i>
-                                Remove
+                            <div class="flex-container">
+                                <select id="rvc_character_select" class="text_pole flex1">
+                                    <!-- Populated by JS -->
+                                </select>
+                                <div id="rvc_delete" class="menu_button menu_button_icon">
+                                    <i class="fa-solid fa-times"></i>
+                                    <span>Remove</span>
+                                </div>
                             </div>
                         </div>
                         <div class="background_controls">
                             <label for="rvc_model_select">Voice:</label>
-                            <select id="rvc_model_select">
-                                <!-- Populated by JS -->
-                            </select>
-                            <div id="rvc_model_refresh_button" class="menu_button">
-                                <i class="fa-solid fa-refresh"></i>
-                                <!-- Refresh -->
+                            <div class="flex-container">
+                                <select id="rvc_model_select" class="text_pole flex1">
+                                    <!-- Populated by JS -->
+                                </select>
+                                <div id="rvc_model_refresh_button" class="menu_button menu_button_icon">
+                                    <i class="fa-solid fa-refresh"></i>
+                                    <span>Refresh</span>
+                                </div>
                             </div>
-                            <div id="rvc_model_upload_select_button" class="menu_button">
+                            <div id="rvc_model_upload_select_button" class="menu_button menu_button_icon">
                                     <i class="fa-solid fa-upload"></i>
-                                    Upload
+                                    <span>Upload</span>
                                 </div>
                                 <input
                                     type="file"
@@ -253,18 +255,27 @@ $(document).ready(function () {
                         </div>
                         <div>
                             <small>
-                                Upload one archive per model. With .pth and .index (optional) inside.<br/>
-                                Supported format: .zip .rar .7zip .7z
+                                Upload one archive per model. With .pth and .index (optional) inside.
+                                Supported formats: .zip .rar .7zip .7z
                             </small>
                         </div>
-                        <div>
+                        <div class="m-t-1">
+                            <label>Voice Map (debug)</label>
+                            <textarea id="rvc_voice_map" type="text" class="text_pole textarea_compact" rows="2"
+                                placeholder="Voice map will appear here for debug purpose"></textarea>
+                        </div>
+                        <div class="title_restorable">
                             <h4>Model Settings</h4>
+                            <div id="rvc_apply" class="menu_button menu_button_icon">
+                                <i class="fa-solid fa-check"></i>
+                                <span>Apply</span>
+                            </div>
                         </div>
                         <div>
                             <label for="rvc_pitch_extraction">
                                 Pitch Extraction
                             </label>
-                            <select id="rvc_pitch_extraction">
+                            <select id="rvc_pitch_extraction" class="text_pole">
                                 <option value="dio">dio</option>
                                 <option value="pm">pm</option>
                                 <option value="harvest">harvest</option>
@@ -274,7 +285,7 @@ $(document).ready(function () {
                             </select>
                             <small>
                                 Tips: dio and pm faster, harvest slower but good.<br/>
-                                Torchcrepe and rmvpe are good but uses GPU.
+                                Torchcrepe and rmvpe are good but use GPU.
                             </small>
                         </div>
                         <div>
@@ -283,7 +294,7 @@ $(document).ready(function () {
                             </label>
                             <input id="rvc_index_rate" type="range" min="0" max="1" step="0.01" value="0.5" />
                             <small>
-                                Controls accent strength, too high may produce artifact.
+                                Controls accent strength, values too high may produce artifacts.
                             </small>
                         </div>
                         <div>
@@ -304,21 +315,16 @@ $(document).ready(function () {
                             <label for="rvc_rms_mix_rate">Mix rate (<span id="rvc_rms_mix_rate_value"></span>)</label>
                             <input id="rvc_rms_mix_rate" type="range" min="0" max="1" step="0.01" value="1" />
                             <small>
-                            Closer to 0 is closer to TTS and 1 is closer to trained voice.
-                            Can help mask noise and sound more natural when set relatively low.
+                                Closer to 0 is closer to TTS and 1 is closer to trained voice.
+                                Can help mask noise and sound more natural when set relatively low.
                             </small>
                         </div>
                         <div>
                             <label for="rvc_protect">Protect amount (<span id="rvc_protect_value"></span>)</label>
                             <input id="rvc_protect" type="range" min="0" max="1" step="0.01" value="0.33" />
                             <small>
-                                Avoid non voice sounds. Lower is more being ignored.
+                                Avoid non-voice sounds. Lower is more being ignored.
                             </small>
-                        </div>
-                        <div id="rvc_status">
-                        </div>
-                        <div class="rvc_buttons">
-                            <input id="rvc_apply" class="menu_button" type="submit" value="Apply" />
                         </div>
                     </div>
                 </div>
@@ -338,7 +344,7 @@ $(document).ready(function () {
         $("#rvc_delete").on("click", onDeleteClick);
 
         $("#rvc_model_upload_files").hide();
-        $("#rvc_model_upload_select_button").on("click", function() {$("#rvc_model_upload_files").click()});
+        $("#rvc_model_upload_select_button").on("click", function () { $("#rvc_model_upload_files").click() });
 
         $("#rvc_model_upload_files").on("change", onChangeUploadFiles);
         //$("#rvc_model_upload_button").on("click", onClickUpload);
@@ -390,7 +396,7 @@ async function rvcVoiceConversion(response, character, text) {
     }
 
     const audioData = await response.blob()
-    if (!audioData.type in ['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/wave', 'audio/webm']) {
+    if (!(['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/wave', 'audio/webm'].includes(audioData.type))) {
         throw `TTS received HTTP response with invalid data format. Expecting audio/mpeg, got ${audioData.type}`
     }
     console.log("Audio type received:", audioData.type)
@@ -410,7 +416,7 @@ async function rvcVoiceConversion(response, character, text) {
         "text": text
     }));
 
-    console.log("Sending tts audio data to RVC on extras server",requestData)
+    console.log("Sending tts audio data to RVC on extras server", requestData)
 
     const url = new URL(getApiUrl());
     url.pathname = '/api/voice-conversion/rvc/process-audio';
@@ -463,17 +469,18 @@ async function moduleWorker() {
 }
 
 function updateCharactersList() {
-    let currentcharacters = new Set();
+    let characterNames = new Set();
     const context = getContext();
     for (const i of context.characters) {
-        currentcharacters.add(i.name);
+        characterNames.add(i.name);
     }
 
-    currentcharacters = Array.from(currentcharacters);
-    currentcharacters.unshift(context.name1);
+    const currentCharacters = Array.from(characterNames);
+    currentCharacters.sort((a, b) => a.localeCompare(b));
+    currentCharacters.unshift(context.name1);
 
-    if (JSON.stringify(charactersList) !== JSON.stringify(currentcharacters)) {
-        charactersList = currentcharacters
+    if (JSON.stringify(charactersList) !== JSON.stringify(currentCharacters)) {
+        charactersList = currentCharacters
 
         $('#rvc_character_select')
             .find('option')
