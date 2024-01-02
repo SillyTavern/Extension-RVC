@@ -394,9 +394,17 @@ async function rvcVoiceConversion(response, character, text) {
         return response;
     }
 
+    // Re-fetch response if it's a URL
+    if (typeof response === 'string') {
+        response = await fetch(response);
+        if (!response.ok) {
+            throw `RVC received HTTP response with status ${response.status}`;
+        }
+    }
+
     const audioData = await response.blob();
-    if (!(['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/wave', 'audio/webm'].includes(audioData.type))) {
-        throw `TTS received HTTP response with invalid data format. Expecting audio/mpeg, got ${audioData.type}`;
+    if (!audioData.type.startsWith('audio/')) {
+        throw `RVC received HTTP response with invalid data format. Expecting audio/*, got ${audioData.type}`;
     }
     console.log('Audio type received:', audioData.type);
 
