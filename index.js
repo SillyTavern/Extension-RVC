@@ -330,7 +330,8 @@ $(document).ready(function () {
             </div>
         </div>
         `;
-        $('#extensions_settings').append(settingsHtml);
+        const getContainer = () => $(document.getElementById('rvc_container') ?? document.getElementById('extensions_settings'));
+        getContainer().append(settingsHtml);
         $('#rvc_enabled').on('click', onEnabledClick);
         $('#rvc_voice_map').attr('disabled', 'disabled');
         $('#rvc_pitch_extraction').on('change', onPitchExtractionChange);
