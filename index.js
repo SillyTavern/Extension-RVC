@@ -4,13 +4,12 @@ TODO:
  - Settings per characters
 */
 
-import { saveSettingsDebounced } from '../../../../script.js';
-import { getContext, getApiUrl, extension_settings, doExtrasFetch, ModuleWorkerWrapper, modules, renderExtensionTemplateAsync } from '../../../extensions.js';
+import { saveSettingsDebounced, eventSource, event_types } from '../../../../script.js';
+import { getContext, getApiUrl, extension_settings, doExtrasFetch, modules, renderExtensionTemplateAsync } from '../../../extensions.js';
 export { MODULE_NAME, rvcVoiceConversion };
 
 const MODULE_NAME = 'third-party/Extension-RVC';
 const DEBUG_PREFIX = '<RVC module> ';
-const UPDATE_INTERVAL = 1000;
 
 const sources = {
     extras: 'extras',
@@ -527,8 +526,12 @@ jQuery(async function () {
     await addExtensionControls(); // No init dependencies
     loadSettings(); // Depends on Extension Controls
 
-    const wrapper = new ModuleWorkerWrapper(moduleWorker);
-    setInterval(wrapper.update.bind(wrapper), UPDATE_INTERVAL);
+    // Update if the chat is changed
+    eventSource.on(event_types.CHAT_CHANGED, moduleWorker);
+    // Update if the current persona is changed
+    eventSource.on(event_types.SETTINGS_UPDATED, moduleWorker);
+    // Update if the character page is loaded (happens on import/creation)
+    eventSource.on(event_types.CHARACTER_PAGE_LOADED, moduleWorker);
     moduleWorker();
 });
 
