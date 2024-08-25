@@ -160,7 +160,7 @@ class ExtrasProvider {
  */
 class RvcPythonProvider {
     verifySource() {
-        if (!extension_settings.rvc.apiUrl) {
+        if (!extension_settings.rvc.rvcPythonApiUrl) {
             throw new Error('rvc-python API URL is not set');
         }
     }
@@ -168,7 +168,7 @@ class RvcPythonProvider {
     async uploadModels(inputFiles) {
         this.verifySource();
 
-        const url = new URL(extension_settings.rvc.apiUrl);
+        const url = new URL(extension_settings.rvc.rvcPythonApiUrl);
         url.pathname = '/upload_model';
 
         for (const file of inputFiles) {
@@ -192,7 +192,7 @@ class RvcPythonProvider {
 
     async getModelsList() {
         this.verifySource();
-        const url = new URL(extension_settings.rvc.apiUrl);
+        const url = new URL(extension_settings.rvc.rvcPythonApiUrl);
         url.pathname = '/models';
 
         const apiResult = await fetch(url, {});
@@ -209,7 +209,7 @@ class RvcPythonProvider {
     async convertVoice(audioData, voiceSettings, _text) {
         this.verifySource();
 
-        const setDeviceUrl = new URL(extension_settings.rvc.apiUrl);
+        const setDeviceUrl = new URL(extension_settings.rvc.rvcPythonApiUrl);
         setDeviceUrl.pathname = '/set_device';
         const setDeviceResponse = await fetch(setDeviceUrl, {
             method: 'POST',
@@ -226,7 +226,7 @@ class RvcPythonProvider {
             throw new Error(`HTTP ${setDeviceResponse.status}: ${await setDeviceResponse.text()}`);
         }
 
-        const setModelUrl = new URL(extension_settings.rvc.apiUrl);
+        const setModelUrl = new URL(extension_settings.rvc.rvcPythonApiUrl);
         setModelUrl.pathname = `/models/${encodeURIComponent(voiceSettings['modelName'])}`;
         const setModelResponse = await fetch(setModelUrl, { method: 'POST' });
 
@@ -235,7 +235,7 @@ class RvcPythonProvider {
             throw new Error(`HTTP ${setModelResponse.status}: ${await setModelResponse.text()}`);
         }
 
-        const setParamsUrl = new URL(extension_settings.rvc.apiUrl);
+        const setParamsUrl = new URL(extension_settings.rvc.rvcPythonApiUrl);
         setParamsUrl.pathname = '/params';
 
         const setParamsResponse = await fetch(setParamsUrl, {
@@ -268,7 +268,7 @@ class RvcPythonProvider {
             reader.readAsDataURL(audioData);
         });
 
-        const convertUrl = new URL(extension_settings.rvc.apiUrl);
+        const convertUrl = new URL(extension_settings.rvc.rvcPythonApiUrl);
         convertUrl.pathname = '/convert';
 
         const apiResult = await fetch(convertUrl, {
@@ -329,7 +329,7 @@ function updateVoiceMapText() {
 
 const defaultSettings = {
     source: sources.extras,
-    apiUrl: 'http://localhost:5050',
+    rvcPythonApiUrl: 'http://localhost:5050',
     rvcPythonCuda: false,
     enabled: false,
     model: '',
@@ -381,8 +381,7 @@ function loadSettings() {
     $('#rvc_voice_map').val(extension_settings.rvc.voiceMapText);
 
     $('#rvc_api_source').val(extension_settings.rvc.source);
-    $('#rvc_api_url').val(extension_settings.rvc.apiUrl);
-
+    $('#rvc_python_api_url').val(extension_settings.rvc.rvcPythonApiUrl);
     $('#rvc_python_cuda').prop('checked', extension_settings.rvc.rvcPythonCuda);
 
     switchSourceSettings();
@@ -482,6 +481,7 @@ async function onDeleteClick() {
 async function onChangeUploadFiles() {
     const inputFiles = $('#rvc_model_upload_files').get(0).files;
     await providers[extension_settings.rvc.source].uploadModels(inputFiles);
+    await refreshVoiceList();
 }
 
 jQuery(async function () {
@@ -514,8 +514,8 @@ jQuery(async function () {
             saveSettingsDebounced();
         });
 
-        $('#rvc_api_url').on('input', function () {
-            extension_settings.rvc.apiUrl = String($('#rvc_api_url').val());
+        $('#rvc_python_api_url').on('input', function () {
+            extension_settings.rvc.rvcPythonApiUrl = String($('#rvc_python_api_url').val());
             saveSettingsDebounced();
         });
 
