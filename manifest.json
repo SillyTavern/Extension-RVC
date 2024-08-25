@@ -1,8 +1,8 @@
 {
     "display_name": "RVC",
     "loading_order": 13,
-    "requires": ["rvc"],
-    "optional": [],
+    "requires": [],
+    "optional": ["rvc"],
     "js": "index.js",
     "css": "style.css",
     "author": "Keij#6799",
