@@ -205,6 +205,27 @@ class RvcPythonProvider {
         return { models_list: jsonResult.models };
     }
 
+    /**
+     * Gets supported conversion method name.
+     * @param {string} method Original method name
+     * @returns {string} Converted method name
+     */
+    #getMethod(method) {
+        switch (method) {
+            case 'torchcrepe':
+                return 'crepe';
+            case 'harvest':
+                return 'harvest';
+            case 'pm':
+                return 'pm';
+            case 'rmvpe':
+                return 'rmvpe';
+            case 'dio':
+            default:
+                return 'harvest';
+        }
+    }
+
     async convertVoice(audioData, voiceSettings, _text) {
         this.verifySource();
 
@@ -244,7 +265,7 @@ class RvcPythonProvider {
             },
             body: JSON.stringify({
                 params: {
-                    f0method: voiceSettings['pitchExtraction'],
+                    f0method: this.#getMethod(voiceSettings['pitchExtraction']),
                     f0up_key: parseInt(voiceSettings['pitchOffset']),
                     index_rate: parseFloat(voiceSettings['indexRate']),
                     filter_radius: parseInt(voiceSettings['filterRadius']),
