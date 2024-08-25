@@ -5,12 +5,298 @@ TODO:
 */
 
 import { saveSettingsDebounced } from '../../../../script.js';
-import { getContext, getApiUrl, extension_settings, doExtrasFetch, ModuleWorkerWrapper, modules } from '../../../extensions.js';
+import { getContext, getApiUrl, extension_settings, doExtrasFetch, ModuleWorkerWrapper, modules, renderExtensionTemplateAsync } from '../../../extensions.js';
 export { MODULE_NAME, rvcVoiceConversion };
 
-const MODULE_NAME = 'RVC';
+const MODULE_NAME = 'third-party/Extension-RVC';
 const DEBUG_PREFIX = '<RVC module> ';
 const UPDATE_INTERVAL = 1000;
+
+const sources = {
+    extras: 'extras',
+    rvcPython: 'rvc-python',
+};
+
+const toastOptions = { timeOut: 10000, extendedTimeOut: 20000, preventDuplicates: true };
+
+/**
+ * @typedef {Object} RvcModelsList
+ * @property {string[]} models_list - List of available models
+ */
+
+/**
+ * RVC Provider interface
+ * @interface
+ */
+class RvcProvider {
+    constructor() {
+    }
+    /**
+     * Upload models to the provider
+     * @function
+     * @name RvcProvider#uploadModels
+     * @param {File[]} inputFiles - The files to upload
+     * @returns {Promise<void>}
+     */
+    uploadModels(inputFiles) { }
+
+    /**
+     * Get the list of models available
+     * @function
+     * @name RvcProvider#getModelsList
+     * @returns {Promise<RvcModelsList>}
+     */
+    getModelsList() { }
+
+    /**
+     * Verify if the provider is available
+     * @function
+     * @name RvcProvider#verifySource
+     * @returns {void}
+     */
+    verifySource() { }
+
+    /**
+     * Convert voice using the provider
+     * @function
+     * @name RvcProvider#convertVoice
+     * @param {Blob} audioData Audio data to convert
+     * @param {object} voiceSettings RVC voice settings
+     * @param {string} text Text to convert
+     * @returns {Promise<Response>} Fetch response
+     */
+    convertVoice(audioData, voiceSettings, text) { }
+}
+
+/**
+ * @implements {RvcProvider}
+ */
+class ExtrasProvider {
+    verifySource() {
+        if (!modules.includes('rvc')) {
+            throw new Error('RVC module is not available');
+        }
+    }
+
+    async uploadModels(inputFiles) {
+        this.verifySource();
+        let formData = new FormData();
+
+        for (const file of inputFiles) {
+            formData.append(file.name, file);
+        }
+
+        console.debug(DEBUG_PREFIX, 'Sending files:', formData);
+        const url = new URL(getApiUrl());
+        url.pathname = '/api/voice-conversion/rvc/upload-models';
+
+        const apiResult = await doExtrasFetch(url, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!apiResult.ok) {
+            toastr.error(apiResult.statusText, DEBUG_PREFIX + ' Check extras console for errors log');
+            throw new Error(`HTTP ${apiResult.status}: ${await apiResult.text()}`);
+        }
+
+        toastr.info('The files have been uploaded successfully.');
+    }
+
+    async getModelsList() {
+        this.verifySource();
+        const url = new URL(getApiUrl());
+        url.pathname = '/api/voice-conversion/rvc/get-models-list';
+
+        const apiResult = await doExtrasFetch(url, {
+            method: 'POST',
+        });
+
+        if (!apiResult.ok) {
+            toastr.error(apiResult.statusText, DEBUG_PREFIX + ' Check model state request failed');
+            throw new Error(`HTTP ${apiResult.status}: ${await apiResult.text()}`);
+        }
+
+        const jsonResult = await apiResult.json();
+        return jsonResult;
+    }
+
+    async convertVoice(audioData, voiceSettings, text) {
+        this.verifySource();
+        const requestData = new FormData();
+        requestData.append('AudioFile', audioData, 'record');
+        requestData.append('json', JSON.stringify({
+            'modelName': voiceSettings['modelName'],
+            'pitchExtraction': voiceSettings['pitchExtraction'],
+            'pitchOffset': voiceSettings['pitchOffset'],
+            'indexRate': voiceSettings['indexRate'],
+            'filterRadius': voiceSettings['filterRadius'],
+            'rmsMixRate': voiceSettings['rmsMixRate'],
+            'protect': voiceSettings['protect'],
+            'text': text,
+        }));
+
+        console.log('Sending tts audio data to RVC on extras server', requestData);
+
+        const url = new URL(getApiUrl());
+        url.pathname = '/api/voice-conversion/rvc/process-audio';
+
+        const apiResult = await doExtrasFetch(url, {
+            method: 'POST',
+            body: requestData,
+        });
+
+        if (!apiResult.ok) {
+            toastr.error(apiResult.statusText, DEBUG_PREFIX + ' RVC Voice Conversion Failed', toastOptions);
+            throw new Error(`HTTP ${apiResult.status}: ${await apiResult.text()}`);
+        }
+
+        return apiResult;
+    }
+}
+
+/**
+ * @implements {RvcProvider}
+ */
+class RvcPythonProvider {
+    verifySource() {
+        if (!extension_settings.rvc.apiUrl) {
+            throw new Error('rvc-python API URL is not set');
+        }
+    }
+
+    async uploadModels(inputFiles) {
+        this.verifySource();
+
+        const url = new URL(extension_settings.rvc.apiUrl);
+        url.pathname = '/upload_model';
+
+        for (const file of inputFiles) {
+            const formData = new FormData();
+            formData.append('file', file);
+            console.debug(DEBUG_PREFIX, 'Sending file:', formData);
+
+            const apiResult = await fetch(url, {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!apiResult.ok) {
+                toastr.error(apiResult.statusText, DEBUG_PREFIX + ' Check rvc-python console for errors log');
+                throw new Error(`HTTP ${apiResult.status}: ${await apiResult.text()}`);
+            }
+        }
+
+        toastr.info('The files have been uploaded successfully.');
+    }
+
+    async getModelsList() {
+        this.verifySource();
+        const url = new URL(extension_settings.rvc.apiUrl);
+        url.pathname = '/models';
+
+        const apiResult = await fetch(url, {});
+
+        if (!apiResult.ok) {
+            toastr.error(apiResult.statusText, DEBUG_PREFIX + ' Check model state request failed');
+            throw new Error(`HTTP ${apiResult.status}: ${await apiResult.text()}`);
+        }
+
+        const jsonResult = await apiResult.json();
+        return { models_list: jsonResult.models };
+    }
+
+    async convertVoice(audioData, voiceSettings, _text) {
+        this.verifySource();
+
+        const setDeviceUrl = new URL(extension_settings.rvc.apiUrl);
+        setDeviceUrl.pathname = '/set_device';
+        const setDeviceResponse = await fetch(setDeviceUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                device: extension_settings.rvc.rvcPythonCuda ? 'cuda' : 'cpu',
+            }),
+        });
+
+        if (!setDeviceResponse.ok) {
+            toastr.error('Could not set device', DEBUG_PREFIX + ' RVC Voice Conversion Failed', toastOptions);
+            throw new Error(`HTTP ${setDeviceResponse.status}: ${await setDeviceResponse.text()}`);
+        }
+
+        const setModelUrl = new URL(extension_settings.rvc.apiUrl);
+        setModelUrl.pathname = `/models/${encodeURIComponent(voiceSettings['modelName'])}`;
+        const setModelResponse = await fetch(setModelUrl, { method: 'POST' });
+
+        if (!setModelResponse.ok) {
+            toastr.error('Could not load model', DEBUG_PREFIX + ' RVC Voice Conversion Failed', toastOptions);
+            throw new Error(`HTTP ${setModelResponse.status}: ${await setModelResponse.text()}`);
+        }
+
+        const setParamsUrl = new URL(extension_settings.rvc.apiUrl);
+        setParamsUrl.pathname = '/params';
+
+        const setParamsResponse = await fetch(setParamsUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                params: {
+                    f0method: voiceSettings['pitchExtraction'],
+                    f0up_key: parseInt(voiceSettings['pitchOffset']),
+                    index_rate: parseFloat(voiceSettings['indexRate']),
+                    filter_radius: parseInt(voiceSettings['filterRadius']),
+                    rms_mix_rate: parseFloat(voiceSettings['rmsMixRate']),
+                    protect: parseFloat(voiceSettings['protect']),
+                }
+            }),
+        });
+
+        if (!setParamsResponse.ok) {
+            toastr.error('Could not set parameters', DEBUG_PREFIX + ' RVC Voice Conversion Failed', toastOptions);
+            throw new Error(`HTTP ${setParamsResponse.status}: ${await setParamsResponse.text()}`);
+        }
+
+        // Convert blob to base64
+        const base64Data = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result.split(',')[1]);
+            reader.onerror = error => reject(error);
+            reader.readAsDataURL(audioData);
+        });
+
+        const convertUrl = new URL(extension_settings.rvc.apiUrl);
+        convertUrl.pathname = '/convert';
+
+        const apiResult = await fetch(convertUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                audio_data: base64Data,
+            }),
+        });
+
+        if (!apiResult.ok) {
+            toastr.error(apiResult.statusText, DEBUG_PREFIX + ' RVC Voice Conversion Failed', toastOptions);
+            throw new Error(`HTTP ${apiResult.status}: ${await apiResult.text()}`);
+        }
+
+        return apiResult;
+    }
+}
+
+/**
+ * @type {Object.<string, RvcProvider>}
+ */
+const providers = {
+    [sources.extras]: new ExtrasProvider(),
+    [sources.rvcPython]: new RvcPythonProvider(),
+}
 
 let charactersList = []; // Updated with module worker
 let rvcModelsList = []; // Initialized only once
@@ -42,10 +328,13 @@ function updateVoiceMapText() {
 //#############################//
 
 const defaultSettings = {
+    source: sources.extras,
+    apiUrl: 'http://localhost:5050',
+    rvcPythonCuda: false,
     enabled: false,
     model: '',
     pitchOffset: 0,
-    pitchExtraction: 'dio',
+    pitchExtraction: 'harvest',
     indexRate: 0.88,
     filterRadius: 3,
     rmsMixRate: 1,
@@ -61,6 +350,13 @@ function loadSettings() {
     if (Object.keys(extension_settings.rvc).length === 0) {
         Object.assign(extension_settings.rvc, defaultSettings);
     }
+
+    for (const key in defaultSettings) {
+        if (extension_settings.rvc[key] === undefined) {
+            extension_settings.rvc[key] = defaultSettings[key];
+        }
+    }
+
     $('#rvc_enabled').prop('checked', extension_settings.rvc.enabled);
     $('#rvc_model').val(extension_settings.rvc.model);
 
@@ -84,6 +380,12 @@ function loadSettings() {
 
     $('#rvc_voice_map').val(extension_settings.rvc.voiceMapText);
 
+    $('#rvc_api_source').val(extension_settings.rvc.source);
+    $('#rvc_api_url').val(extension_settings.rvc.apiUrl);
+
+    $('#rvc_python_cuda').prop('checked', extension_settings.rvc.rvcPythonCuda);
+
+    switchSourceSettings();
 }
 
 async function onEnabledClick() {
@@ -137,12 +439,12 @@ async function onApplyClick() {
     const protect = $('#rvc_protect').val();
 
     if (character === 'none') {
-        toastr.error('Character not selected.', DEBUG_PREFIX + ' voice mapping apply', { timeOut: 10000, extendedTimeOut: 20000, preventDuplicates: true });
+        toastr.error('Character not selected.', DEBUG_PREFIX + ' voice mapping apply', toastOptions);
         return;
     }
 
     if (model_name == 'none') {
-        toastr.error('Model not selected.', DEBUG_PREFIX + ' voice mapping apply', { timeOut: 10000, extendedTimeOut: 20000, preventDuplicates: true });
+        toastr.error('Model not selected.', DEBUG_PREFIX + ' voice mapping apply', toastOptions);
         return;
     }
 
@@ -167,7 +469,7 @@ async function onDeleteClick() {
     const character = String($('#rvc_character_select').val());
 
     if (character === 'none') {
-        toastr.error('Character not selected.', DEBUG_PREFIX + ' voice mapping delete', { timeOut: 10000, extendedTimeOut: 20000, preventDuplicates: true });
+        toastr.error('Character not selected.', DEBUG_PREFIX + ' voice mapping delete', toastOptions);
         return;
     }
 
@@ -178,158 +480,13 @@ async function onDeleteClick() {
 }
 
 async function onChangeUploadFiles() {
-    const url = new URL(getApiUrl());
     const inputFiles = $('#rvc_model_upload_files').get(0).files;
-    let formData = new FormData();
-
-    for (const file of inputFiles)
-        formData.append(file.name, file);
-
-    console.debug(DEBUG_PREFIX, 'Sending files:', formData);
-    url.pathname = '/api/voice-conversion/rvc/upload-models';
-
-    const apiResult = await doExtrasFetch(url, {
-        method: 'POST',
-        body: formData,
-    });
-
-    if (!apiResult.ok) {
-        toastr.error(apiResult.statusText, DEBUG_PREFIX + ' Check extras console for errors log');
-        throw new Error(`HTTP ${apiResult.status}: ${await apiResult.text()}`);
-    }
-
-    alert('The files have been uploaded successfully.');
+    await providers[extension_settings.rvc.source].uploadModels(inputFiles);
 }
 
-$(document).ready(function () {
-    function addExtensionControls() {
-        const settingsHtml = `
-        <div id="rvc_settings">
-            <div class="inline-drawer">
-                <div class="inline-drawer-toggle inline-drawer-header">
-                    <b>RVC</b>
-                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
-                </div>
-                <div class="inline-drawer-content">
-                    <h4 class="center">Characters Voice Mapping</h4>
-                    <div>
-                        <label class="checkbox_label" for="rvc_enabled">
-                            <input type="checkbox" id="rvc_enabled" name="rvc_enabled">
-                            <small>Enabled</small>
-                        </label>
-                    </div>
-                    <div>
-                        <div class="background_controls">
-                            <label for="rvc_character_select">Character:</label>
-                            <div class="flex-container">
-                                <select id="rvc_character_select" class="text_pole flex1">
-                                    <!-- Populated by JS -->
-                                </select>
-                                <div id="rvc_delete" class="menu_button menu_button_icon">
-                                    <i class="fa-solid fa-times"></i>
-                                    <span>Remove</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="background_controls">
-                            <label for="rvc_model_select">Voice:</label>
-                            <div class="flex-container">
-                                <select id="rvc_model_select" class="text_pole flex1">
-                                    <!-- Populated by JS -->
-                                </select>
-                                <div id="rvc_model_refresh_button" class="menu_button menu_button_icon">
-                                    <i class="fa-solid fa-refresh"></i>
-                                    <span>Refresh</span>
-                                </div>
-                            </div>
-                            <div id="rvc_model_upload_select_button" class="menu_button menu_button_icon">
-                                    <i class="fa-solid fa-upload"></i>
-                                    <span>Upload</span>
-                                </div>
-                                <input
-                                    type="file"
-                                    id="rvc_model_upload_files"
-                                    accept=".zip,.rar,.7zip,.7z" multiple />
-                            </div>
-                        </div>
-                        <div>
-                            <small>
-                                Upload one archive per model. With .pth and .index (optional) inside.
-                                Supported formats: .zip .rar .7zip .7z
-                            </small>
-                        </div>
-                        <div class="m-t-1">
-                            <label>Voice Map (debug)</label>
-                            <textarea id="rvc_voice_map" type="text" class="text_pole textarea_compact" rows="2"
-                                placeholder="Voice map will appear here for debug purpose"></textarea>
-                        </div>
-                        <div class="title_restorable">
-                            <h4>Model Settings</h4>
-                            <div id="rvc_apply" class="menu_button menu_button_icon">
-                                <i class="fa-solid fa-check"></i>
-                                <span>Apply</span>
-                            </div>
-                        </div>
-                        <div>
-                            <label for="rvc_pitch_extraction">
-                                Pitch Extraction
-                            </label>
-                            <select id="rvc_pitch_extraction" class="text_pole">
-                                <option value="dio">dio</option>
-                                <option value="pm">pm</option>
-                                <option value="harvest">harvest</option>
-                                <option value="torchcrepe">torchcrepe</option>
-                                <option value="rmvpe">rmvpe</option>
-                                <option value="">None</option>
-                            </select>
-                            <small>
-                                Tips: dio and pm faster, harvest slower but good.<br/>
-                                Torchcrepe and rmvpe are good but use GPU.
-                            </small>
-                        </div>
-                        <div>
-                            <label for="rvc_index_rate">
-                                Search feature ratio (<span id="rvc_index_rate_value"></span>)
-                            </label>
-                            <input id="rvc_index_rate" type="range" min="0" max="1" step="0.01" value="0.5" />
-                            <small>
-                                Controls accent strength, values too high may produce artifacts.
-                            </small>
-                        </div>
-                        <div>
-                            <label for="rvc_filter_radius">Filter radius (<span id="rvc_filter_radius_value"></span>)</label>
-                            <input id="rvc_filter_radius" type="range" min="0" max="7" step="1" value="3" />
-                            <small>
-                                Higher can reduce breathiness but may increase run time.
-                            </small>
-                        </div>
-                        <div>
-                            <label for="rvc_pitch_offset">Pitch offset (<span id="rvc_pitch_offset_value"></span>)</label>
-                            <input id="rvc_pitch_offset" type="range" min="-20" max="20" step="1" value="0" />
-                            <small>
-                                Recommended +12 key for male to female conversion and -12 key for female to male conversion.
-                            </small>
-                        </div>
-                        <div>
-                            <label for="rvc_rms_mix_rate">Mix rate (<span id="rvc_rms_mix_rate_value"></span>)</label>
-                            <input id="rvc_rms_mix_rate" type="range" min="0" max="1" step="0.01" value="1" />
-                            <small>
-                                Closer to 0 is closer to TTS and 1 is closer to trained voice.
-                                Can help mask noise and sound more natural when set relatively low.
-                            </small>
-                        </div>
-                        <div>
-                            <label for="rvc_protect">Protect amount (<span id="rvc_protect_value"></span>)</label>
-                            <input id="rvc_protect" type="range" min="0" max="1" step="0.01" value="0.33" />
-                            <small>
-                                Avoid non-voice sounds. Lower is more being ignored.
-                            </small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        `;
+jQuery(async function () {
+    async function addExtensionControls() {
+        const settingsHtml = await renderExtensionTemplateAsync(MODULE_NAME, 'settings');
         const getContainer = () => $(document.getElementById('rvc_container') ?? document.getElementById('extensions_settings'));
         getContainer().append(settingsHtml);
         $('#rvc_enabled').on('click', onEnabledClick);
@@ -350,8 +507,24 @@ $(document).ready(function () {
         //$("#rvc_model_upload_button").on("click", onClickUpload);
         $('#rvc_model_refresh_button').on('click', refreshVoiceList);
 
+        $('#rvc_api_source').on('change', function () {
+            extension_settings.rvc.source = String($('#rvc_api_source').val());
+            switchSourceSettings();
+            refreshVoiceList();
+            saveSettingsDebounced();
+        });
+
+        $('#rvc_api_url').on('input', function () {
+            extension_settings.rvc.apiUrl = String($('#rvc_api_url').val());
+            saveSettingsDebounced();
+        });
+
+        $('#rvc_python_cuda').on('input', function () {
+            extension_settings.rvc.rvcPythonCuda = $('#rvc_python_cuda').is(':checked');
+            saveSettingsDebounced();
+        });
     }
-    addExtensionControls(); // No init dependencies
+    await addExtensionControls(); // No init dependencies
     loadSettings(); // Depends on Extension Controls
 
     const wrapper = new ModuleWorkerWrapper(moduleWorker);
@@ -359,38 +532,22 @@ $(document).ready(function () {
     moduleWorker();
 });
 
+function switchSourceSettings() {
+    document.querySelectorAll('#rvc_settings [data-rvc-source]').forEach((el) => {
+        el.style.display = el.getAttribute('data-rvc-source') === extension_settings.rvc.source ? 'block' : 'none';
+    });
+}
+
 //#############################//
 //  API Calls                  //
 //#############################//
 
 /*
-    Check model installation state, return one of ["installed", "corrupted", "absent"]
-*/
-async function get_models_list(model_id) {
-    const url = new URL(getApiUrl());
-    url.pathname = '/api/voice-conversion/rvc/get-models-list';
-
-    const apiResult = await doExtrasFetch(url, {
-        method: 'POST',
-    });
-
-    if (!apiResult.ok) {
-        toastr.error(apiResult.statusText, DEBUG_PREFIX + ' Check model state request failed');
-        throw new Error(`HTTP ${apiResult.status}: ${await apiResult.text()}`);
-    }
-
-    return apiResult;
-}
-
-/*
     Send an audio file to RVC to convert voice
 */
 async function rvcVoiceConversion(response, character, text) {
-    let apiResult;
-
     // Check voice map
     if (extension_settings.rvc.voiceMap[character] === undefined) {
-        //toastr.error("No model is assigned to character '"+character+"', check RVC voice map in the extension menu.", DEBUG_PREFIX+'RVC Voice map error', { timeOut: 10000, extendedTimeOut: 20000, preventDuplicates: true });
         console.info(DEBUG_PREFIX, 'No RVC model assign in voice map for current character ' + character);
         return response;
     }
@@ -409,35 +566,10 @@ async function rvcVoiceConversion(response, character, text) {
     }
     console.log('Audio type received:', audioData.type);
 
-    const voice_settings = extension_settings.rvc.voiceMap[character];
+    const voiceSettings = extension_settings.rvc.voiceMap[character];
 
-    var requestData = new FormData();
-    requestData.append('AudioFile', audioData, 'record');
-    requestData.append('json', JSON.stringify({
-        'modelName': voice_settings['modelName'],
-        'pitchExtraction': voice_settings['pitchExtraction'],
-        'pitchOffset': voice_settings['pitchOffset'],
-        'indexRate': voice_settings['indexRate'],
-        'filterRadius': voice_settings['filterRadius'],
-        'rmsMixRate': voice_settings['rmsMixRate'],
-        'protect': voice_settings['protect'],
-        'text': text,
-    }));
-
-    console.log('Sending tts audio data to RVC on extras server', requestData);
-
-    const url = new URL(getApiUrl());
-    url.pathname = '/api/voice-conversion/rvc/process-audio';
-
-    apiResult = await doExtrasFetch(url, {
-        method: 'POST',
-        body: requestData,
-    });
-
-    if (!apiResult.ok) {
-        toastr.error(apiResult.statusText, DEBUG_PREFIX + ' RVC Voice Conversion Failed', { timeOut: 10000, extendedTimeOut: 20000, preventDuplicates: true });
-        throw new Error(`HTTP ${apiResult.status}: ${await apiResult.text()}`);
-    }
+    const provider = providers[extension_settings.rvc.source];
+    const apiResult = await provider.convertVoice(audioData, voiceSettings);
 
     return apiResult;
 }
@@ -449,8 +581,8 @@ window['rvcVoiceConversion'] = rvcVoiceConversion;
 //#############################//
 
 async function refreshVoiceList() {
-    let result = await get_models_list();
-    result = await result.json();
+    const provider = providers[extension_settings.rvc.source];
+    const result = await provider.getModelsList();
     rvcModelsList = result['models_list'];
 
     $('#rvc_model_select')
@@ -471,8 +603,15 @@ async function refreshVoiceList() {
 async function moduleWorker() {
     updateCharactersList();
 
-    if (modules.includes('rvc') && !rvcModelsReceived) {
-        refreshVoiceList();
+    try {
+        const provider = providers[extension_settings.rvc.source];
+        provider.verifySource();
+
+        if (!rvcModelsReceived) {
+            refreshVoiceList();
+        }
+    } catch {
+        // Ignore errors
     }
 }
 

@@ -1,0 +1,148 @@
+
+<div id="rvc_settings">
+    <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <b>RVC</b>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+        <div class="inline-drawer-content">
+            <h4>RVC API Source</h4>
+            <select id="rvc_api_source" class="text_pole">
+                <option value="extras">Extras</option>
+                <option value="rvc-python">rvc-python</option>
+            </select>
+            <div data-rvc-source="rvc-python">
+                <div>
+                    <b>
+                        Install from: <a href="https://github.com/daswer123/rvc-python">daswer123/rvc-python</a>
+                    </b>
+                </div>
+                <div>
+                    <label for="rvc_api_url">rvc-python API URL</label>
+                    <input id="rvc_api_url" type="text" class="text_pole" placeholder="Enter an API URL path." />
+                </div>
+                <div>
+                    <label class="checkbox_label" for="rvc_python_cuda">
+                        <input type="checkbox" id="rvc_python_cuda" name="rvc_python_cuda">
+                        <small>Use CUDA</small>
+                    </label>
+                </div>
+            </div>
+            <h4 class="center">Characters Voice Mapping</h4>
+            <div>
+                <label class="checkbox_label" for="rvc_enabled">
+                    <input type="checkbox" id="rvc_enabled" name="rvc_enabled">
+                    <small>Enabled</small>
+                </label>
+            </div>
+            <div>
+                <div class="background_controls">
+                    <label for="rvc_character_select">Character:</label>
+                    <div class="flex-container">
+                        <select id="rvc_character_select" class="text_pole flex1">
+                            <!-- Populated by JS -->
+                        </select>
+                        <div id="rvc_delete" class="menu_button menu_button_icon">
+                            <i class="fa-solid fa-times"></i>
+                            <span>Remove</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="background_controls">
+                    <label for="rvc_model_select">Voice:</label>
+                    <div class="flex-container">
+                        <select id="rvc_model_select" class="text_pole flex1">
+                            <!-- Populated by JS -->
+                        </select>
+                        <div id="rvc_model_refresh_button" class="menu_button menu_button_icon">
+                            <i class="fa-solid fa-refresh"></i>
+                            <span>Refresh</span>
+                        </div>
+                    </div>
+                    <div id="rvc_model_upload_select_button" class="menu_button menu_button_icon">
+                            <i class="fa-solid fa-upload"></i>
+                            <span>Upload</span>
+                        </div>
+                        <input
+                            type="file"
+                            id="rvc_model_upload_files"
+                            accept=".zip,.rar,.7zip,.7z" multiple />
+                    </div>
+                </div>
+                <div>
+                    <small>
+                        Upload one archive per model. With .pth and .index (optional) inside.
+                        Supported formats: .zip .rar .7zip .7z
+                    </small>
+                </div>
+                <div class="m-t-1">
+                    <label>Voice Map (debug)</label>
+                    <textarea id="rvc_voice_map" type="text" class="text_pole textarea_compact" rows="2"
+                        placeholder="Voice map will appear here for debug purpose"></textarea>
+                </div>
+                <div class="title_restorable">
+                    <h4>Model Settings</h4>
+                    <div id="rvc_apply" class="menu_button menu_button_icon">
+                        <i class="fa-solid fa-check"></i>
+                        <span>Apply</span>
+                    </div>
+                </div>
+                <div>
+                    <label for="rvc_pitch_extraction">
+                        Pitch Extraction
+                    </label>
+                    <select id="rvc_pitch_extraction" class="text_pole">
+                        <option value="dio">dio</option>
+                        <option value="pm">pm</option>
+                        <option value="harvest">harvest</option>
+                        <option value="torchcrepe">torchcrepe</option>
+                        <option value="rmvpe">rmvpe</option>
+                        <option value="">None</option>
+                    </select>
+                    <small>
+                        Tips: dio and pm faster, harvest slower but good.<br/>
+                        Torchcrepe and rmvpe are good but use GPU.
+                    </small>
+                </div>
+                <div>
+                    <label for="rvc_index_rate">
+                        Search feature ratio (<span id="rvc_index_rate_value"></span>)
+                    </label>
+                    <input id="rvc_index_rate" type="range" min="0" max="1" step="0.01" value="0.5" />
+                    <small>
+                        Controls accent strength, values too high may produce artifacts.
+                    </small>
+                </div>
+                <div>
+                    <label for="rvc_filter_radius">Filter radius (<span id="rvc_filter_radius_value"></span>)</label>
+                    <input id="rvc_filter_radius" type="range" min="1" max="7" step="2" value="3" />
+                    <small>
+                        Higher can reduce breathiness but may increase run time.
+                    </small>
+                </div>
+                <div>
+                    <label for="rvc_pitch_offset">Pitch offset (<span id="rvc_pitch_offset_value"></span>)</label>
+                    <input id="rvc_pitch_offset" type="range" min="-20" max="20" step="1" value="0" />
+                    <small>
+                        Recommended +12 key for male to female conversion and -12 key for female to male conversion.
+                    </small>
+                </div>
+                <div>
+                    <label for="rvc_rms_mix_rate">Mix rate (<span id="rvc_rms_mix_rate_value"></span>)</label>
+                    <input id="rvc_rms_mix_rate" type="range" min="0" max="1" step="0.01" value="1" />
+                    <small>
+                        Closer to 0 is closer to TTS and 1 is closer to trained voice.
+                        Can help mask noise and sound more natural when set relatively low.
+                    </small>
+                </div>
+                <div>
+                    <label for="rvc_protect">Protect amount (<span id="rvc_protect_value"></span>)</label>
+                    <input id="rvc_protect" type="range" min="0" max="1" step="0.01" value="0.33" />
+                    <small>
+                        Avoid non-voice sounds. Lower is more being ignored.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
