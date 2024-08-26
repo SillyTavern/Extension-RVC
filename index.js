@@ -6,6 +6,7 @@ TODO:
 
 import { saveSettingsDebounced, eventSource, event_types } from '../../../../script.js';
 import { getContext, getApiUrl, extension_settings, doExtrasFetch, modules, renderExtensionTemplateAsync } from '../../../extensions.js';
+import { isValidUrl } from '../../../utils.js';
 export { MODULE_NAME, rvcVoiceConversion };
 
 const MODULE_NAME = 'third-party/Extension-RVC';
@@ -51,9 +52,10 @@ class RvcProvider {
      * Verify if the provider is available
      * @function
      * @name RvcProvider#verifySource
-     * @returns {void}
+     * @param {boolean} throwOnFail - Throw an error if the provider is not available
+     * @returns {boolean}
      */
-    verifySource() { }
+    verifySource(throwOnFail) { }
 
     /**
      * Convert voice using the provider
@@ -71,10 +73,16 @@ class RvcProvider {
  * @implements {RvcProvider}
  */
 class ExtrasProvider {
-    verifySource() {
+    verifySource(throwOnFail = true) {
         if (!modules.includes('rvc')) {
-            throw new Error('RVC module is not available');
+            if (throwOnFail) {
+                throw new Error('RVC module is not available');
+            }
+
+            return false;
         }
+
+        return true;
     }
 
     async uploadModels(inputFiles) {
@@ -158,10 +166,16 @@ class ExtrasProvider {
  * @implements {RvcProvider}
  */
 class RvcPythonProvider {
-    verifySource() {
-        if (!extension_settings.rvc.rvcPythonApiUrl) {
-            throw new Error('rvc-python API URL is not set');
+    verifySource(throwOnFail = true) {
+        if (!extension_settings.rvc.rvcPythonApiUrl || !isValidUrl(extension_settings.rvc.rvcPythonApiUrl)) {
+            if (throwOnFail) {
+                throw new Error('rvc-python API URL is not set');
+            }
+
+            return false;
         }
+
+        return true;
     }
 
     async uploadModels(inputFiles) {
@@ -553,6 +567,8 @@ jQuery(async function () {
     eventSource.on(event_types.SETTINGS_UPDATED, moduleWorker);
     // Update if the character page is loaded (happens on import/creation)
     eventSource.on(event_types.CHARACTER_PAGE_LOADED, moduleWorker);
+    // Update if the extras are connected
+    eventSource.on(event_types.EXTRAS_CONNECTED, moduleWorker);
     moduleWorker();
 });
 
@@ -592,10 +608,16 @@ async function rvcVoiceConversion(response, character, text) {
 
     const voiceSettings = extension_settings.rvc.voiceMap[character];
 
-    const provider = providers[extension_settings.rvc.source];
-    const apiResult = await provider.convertVoice(audioData, voiceSettings);
-
-    return apiResult;
+    try {
+        // Create a converted voice response
+        const provider = providers[extension_settings.rvc.source];
+        const apiResult = await provider.convertVoice(audioData, voiceSettings);
+        return apiResult;
+    } catch (error) {
+        // Return original response if conversion failed
+        console.error(DEBUG_PREFIX, 'RVC Voice Conversion Failed:', error);
+        return response;
+    }
 }
 
 window['rvcVoiceConversion'] = rvcVoiceConversion;
@@ -606,6 +628,12 @@ window['rvcVoiceConversion'] = rvcVoiceConversion;
 
 async function refreshVoiceList() {
     const provider = providers[extension_settings.rvc.source];
+    const isProviderValid = provider.verifySource(false);
+
+    if (!isProviderValid) {
+        return;
+    }
+
     const result = await provider.getModelsList();
     rvcModelsList = result['models_list'];
 
@@ -629,9 +657,9 @@ async function moduleWorker() {
 
     try {
         const provider = providers[extension_settings.rvc.source];
-        provider.verifySource();
+        const isProviderValid = provider.verifySource(false);
 
-        if (!rvcModelsReceived) {
+        if (isProviderValid && !rvcModelsReceived) {
             refreshVoiceList();
         }
     } catch {
